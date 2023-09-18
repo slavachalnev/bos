@@ -15,6 +15,8 @@ import circuitsvis as cv
 
 
 model = HookedTransformer.from_pretrained('attn-only-2l', device='cpu')
+# model = HookedTransformer.from_pretrained('gpt2-small', device='cpu')
+
 tokenizer = model.tokenizer
 ct = ColoredTokenizer(tokenizer)
 
@@ -43,8 +45,9 @@ def doubled_patterns(text, insert_bos=False):
 
 
 def losses(tokens: List[int], insert_bos=False):
-    random_tok = random.randint(0, model.cfg.d_vocab)
-    tokens = [tokenizer.bos_token_id] + tokens + ([tokenizer.bos_token_id] if insert_bos else [random_tok]) + tokens
+    r1 = random.randint(0, model.cfg.d_vocab)
+    bos = tokenizer.bos_token_id
+    tokens = [bos] + tokens + ([bos] if insert_bos else [r1]) + tokens
     tok_tens = torch.tensor(tokens).unsqueeze(0)
 
     with torch.no_grad():
