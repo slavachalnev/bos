@@ -1,4 +1,7 @@
 # %%
+from typing import List
+import random
+
 import torch
 import torch.nn.functional as F
 
@@ -19,17 +22,15 @@ ct = ColoredTokenizer(tokenizer)
 
 def doubled_patterns(text, insert_bos=False):
     tokenizer = model.tokenizer
-    mid_id = [tokenizer.bos_token_id] if insert_bos else tokenizer.encode('.')
+    mid_id = [tokenizer.bos_token_id] if insert_bos else tokenizer.encode('\n')
     tokens = tokenizer.encode(text)
     tokens = [tokenizer.bos_token_id] + tokens + mid_id + tokens
     tok_tens = torch.tensor(tokens).unsqueeze(0)
-    print(tokens)
-    ct(tokens)
 
     with torch.no_grad():
         logits, cache = model.run_with_cache(tok_tens, remove_batch_dim=True, return_type='logits')
 
-    mid_tok = [tokenizer.bos_token] if insert_bos else ["."]
+    mid_tok = [tokenizer.bos_token] if insert_bos else ["\n"]
     str_toks = model.to_str_tokens(text, prepend_bos=False)
     str_toks = [tokenizer.bos_token] + str_toks + mid_tok + str_toks
 
@@ -39,6 +40,16 @@ def doubled_patterns(text, insert_bos=False):
             tokens=str_toks,
             attention=attn_pattern,
         ))
+
+
+def losses(tokens: List[int], insert_bos=False):
+    random_tok = random.randint(0, model.cfg.d_vocab)
+    tokens = [tokenizer.bos_token_id] + tokens + ([tokenizer.bos_token_id] if insert_bos else [random_tok]) + tokens
+    tok_tens = torch.tensor(tokens).unsqueeze(0)
+
+    with torch.no_grad():
+        logits = model.forward(tok_tens, return_type='logits', prepend_bos=False)
+
     losses = F.cross_entropy(
         logits[0, :-1, :],
         tok_tens[0, 1:],
@@ -49,10 +60,23 @@ def doubled_patterns(text, insert_bos=False):
 # %%
 
 text = "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."
-losses_no_bos = doubled_patterns(text)
-losses_yes_bos = doubled_patterns(text, insert_bos=True)
+doubled_patterns(text)
+doubled_patterns(text, insert_bos=True)
 
 # %%
+# compute average loss over many samples
+n_toks = 20
+losses_no_bos = torch.zeros(n_toks*2 + 1)
+losses_yes_bos = torch.zeros(n_toks*2 + 1)
+n_samples = 100
+
+for _ in range(n_samples):
+    toks_for_loss = [random.randint(0, model.cfg.d_vocab) for _ in range(20)]
+    losses_no_bos += losses(toks_for_loss)
+    losses_yes_bos += losses(toks_for_loss, insert_bos=True)
+
+losses_no_bos /= n_samples
+losses_yes_bos /= n_samples
 
 length_each_repetition = losses_no_bos.shape[0] // 2
 # Splitting the losses into first and second repetitions using calculated length
